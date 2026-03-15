@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Light. — Real-Time Scam Protection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Base ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f7f6f2;
+      --surface:     #ffffff;
+      --border:      #e4e2db;
+      --border-soft: #eeecea;
+      --text:        #1a1917;
+      --text-muted:  #7a7870;
+      --text-faint:  #b0ae a6;
+      --accent:      #1a4a3a;
+      --accent-light:#e8f0ed;
+      --danger:      #b91c1c;
+      --danger-light:#fef2f2;
+      --warn:        #92400e;
+      --warn-light:  #fffbeb;
+      --safe:        #166534;
+      --safe-light:  #f0fdf4;
+      --radius:      10px;
+      --radius-lg:   16px;
+      --mono:        'Geist Mono', monospace;
+      --serif:       'Instrument Serif', serif;
+    }
+
+    body {
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Animations ───────────────────────────────── */
+    @keyframes fadeUp   { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
+    @keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
+    @keyframes pulse    { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+    @keyframes ripple   { 0% { transform:scale(1); opacity:.6 } 100% { transform:scale(2.2); opacity:0 } }
+    @keyframes scanline { 0% { transform:translateY(-100%) } 100% { transform:translateY(400%) } }
+    @keyframes blink    { 0%,100% { opacity:1 } 49% { opacity:1 } 50% { opacity:0 } 99% { opacity:0 } }
+    @keyframes fillBar  { from { width:0 } to { width:var(--target-w) } }
+
+    .fade-up { animation: fadeUp .4s ease both; }
+
+    /* ── Layout ───────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .logo {
+      font-family: var(--serif);
+      font-size: 26px;
+      color: var(--text);
+      letter-spacing: -.02em;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .logo-sub {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 400;
+      letter-spacing: .18em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 10px;
+      letter-spacing: .12em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      background: var(--surface);
+      transition: border-color .3s, color .3s;
+    }
+    .status-badge.recording {
+      border-color: #dc2626;
+      color: #dc2626;
+    }
+    .status-badge.analyzing {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background .3s;
+      flex-shrink: 0;
+    }
+    .status-badge.recording  .status-dot { background:#dc2626; animation: pulse 1.4s ease infinite; }
+    .status-badge.analyzing .status-dot { background:var(--accent); animation: pulse .9s ease infinite; }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    /* ── Cards ────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-label {
+      font-size: 9px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .card-body { padding: 22px; }
+
+    /* ── Mic Button ───────────────────────────────── */
+    .mic-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      padding: 36px 22px;
+    }
+
+    .mic-btn-outer {
+      position: relative;
+      width: 96px; height: 96px;
+      cursor: pointer;
+    }
+    .mic-ripple {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 1.5px solid #dc2626;
+      opacity: 0;
+    }
+    .mic-btn-outer.recording .mic-ripple {
+      animation: ripple 1.6s ease-out infinite;
+    }
+    .mic-ripple:nth-child(2) { animation-delay: .5s !important; }
+
+    .mic-btn {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .25s, border-color .25s, transform .15s;
+      cursor: pointer;
+    }
+    .mic-btn:hover { background: var(--bg); transform: scale(1.04); }
+    .mic-btn-outer.recording .mic-btn {
+      background: #fef2f2;
+      border-color: #dc2626;
+    }
+
+    .mic-icon { width: 28px; height: 28px; transition: opacity .2s; }
+    .stop-icon { display: none; }
+    .mic-btn-outer.recording .mic-icon.mic-icon-mic  { display: none; }
+    .mic-btn-outer.recording .mic-icon.stop-icon { display: block; }
+
+    .mic-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: .06em;
+      text-align: center;
+      line-height: 1.8;
+    }
+    .mic-hint strong { color: var(--text); font-weight: 500; }
+
+    /* ── Waveform ─────────────────────────────────── */
+    #waveform {
+      width: 100%;
+      height: 48px;
+      display: block;
+    }
+
+    /* ── Transcript ───────────────────────────────── */
+    #transcript-box {
+      min-height: 140px;
+      max-height: 220px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.85;
+      color: var(--text);
+      font-weight: 300;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .transcript-empty {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-style: italic;
+    }
+    .chunk-new {
+      animation: fadeIn .35s ease both;
+    }
+    .cursor-blink {
+      display: inline-block;
+      width: 7px; height: 13px;
+      background: var(--accent);
+      margin-left: 3px;
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+
+    /* ── Score Meter ──────────────────────────────── */
+    .score-display {
+      display: flex;
+      align-items: flex-end;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .score-number {
+      font-family: var(--serif);
+      font-size: 68px;
+      line-height: 1;
+      color: var(--text);
+      transition: color .6s;
+      font-style: italic;
+    }
+    .score-number.danger { color: var(--danger); }
+    .score-number.warn   { color: #d97706; }
+    .score-number.safe   { color: var(--safe); }
+
+    .score-meta {
+      padding-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .score-type {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .08em;
+      color: var(--text);
+      text-transform: uppercase;
+      max-width: 160px;
+    }
+    .score-urgency {
+      font-size: 9px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 20px;
+      display: inline-block;
+      width: fit-content;
+    }
+    .urgency-low    { background: var(--safe-light);  color: var(--safe); }
+    .urgency-medium { background: var(--warn-light);  color: var(--warn); }
+    .urgency-high   { background: var(--danger-light);color: var(--danger); }
+
+    .progress-track {
+      height: 4px;
+      background: var(--border-soft);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 22px;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 2px;
+      width: 0%;
+      background: var(--safe);
+      transition: width .9s cubic-bezier(.4,0,.2,1), background .6s;
+    }
+    .progress-fill.danger { background: var(--danger); }
+    .progress-fill.warn   { background: #d97706; }
+
+    /* ── Reasons ──────────────────────────────────── */
+    .section-title {
+      font-size: 9px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .reason-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 22px;
+    }
+    .reason-item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 12px;
+      line-height: 1.65;
+      color: var(--text);
+      font-weight: 300;
+      animation: fadeUp .35s ease both;
+    }
+    .reason-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--danger);
+      margin-top: 7px;
+      flex-shrink: 0;
+    }
+
+    /* ── Questions ────────────────────────────────── */
+    .question-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .question-item {
+      padding: 11px 15px;
+      background: var(--accent-light);
+      border-radius: var(--radius);
+      font-size: 12px;
+      line-height: 1.65;
+      color: var(--accent);
+      font-family: var(--serif);
+      font-style: italic;
+      animation: fadeUp .35s ease both;
+    }
+
+    /* ── Footer / Reset ───────────────────────────── */
+    .reset-row {
+      padding: 14px 22px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .reset-btn {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid var(--border);
+      padding: 7px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: color .2s, border-color .2s, background .2s;
+    }
+    .reset-btn:hover {
+      color: var(--danger);
+      border-color: var(--danger);
+      background: var(--danger-light);
+    }
+
+    .chunk-counter {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: .08em;
+    }
+
+    /* ── Idle placeholder ─────────────────────────── */
+    .idle-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 22px;
+      gap: 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .idle-placeholder svg { opacity: .3; }
+    .idle-placeholder p {
+      font-size: 12px;
+      line-height: 1.9;
+      font-weight: 300;
+    }
+
+    /* ── Toast ────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--text);
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: .08em;
+      padding: 9px 20px;
+      border-radius: 20px;
+      opacity: 0;
+      transition: opacity .3s, transform .3s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 100;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Responsive ───────────────────────────────── */
+    @media (max-width: 780px) {
+      main { grid-template-columns: 1fr; padding: 16px; }
+      header { padding: 0 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    Light.
+    <span class="logo-sub">Scam Protection</span>
+  </div>
+  <div class="status-badge" id="status-badge">
+    <div class="status-dot"></div>
+    <span id="status-text">Standby</span>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────── -->
+<main>
+
+  <!-- Left column: mic + transcript -->
+  <div style="display:flex;flex-direction:column;gap:20px">
+
+    <!-- Mic card -->
+    <div class="card fade-up" style="animation-delay:.05s">
+      <div class="card-header">
+        <span class="card-label">Microphone</span>
+        <span id="timer" style="font-size:10px;color:var(--text-muted);letter-spacing:.1em">00:00</span>
+      </div>
+      <div class="mic-wrap">
+        <div class="mic-btn-outer" id="mic-outer" onclick="toggleRecording()">
+          <div class="mic-ripple"></div>
+          <div class="mic-ripple"></div>
+          <div class="mic-btn">
+            <!-- Mic icon -->
+            <svg class="mic-icon mic-icon-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10a7 7 0 0014 0M12 19v3M9 22h6"/>
+            </svg>
+            <!-- Stop icon -->
+            <svg class="mic-icon stop-icon" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </div>
+        </div>
+        <canvas id="waveform"></canvas>
+        <p class="mic-hint" id="mic-hint">
+          <strong>Tap to start monitoring</strong><br>
+          Audio is analyzed every 4 seconds
+        </p>
+      </div>
+    </div>
+
+    <!-- Transcript card -->
+    <div class="card fade-up" style="animation-delay:.1s">
+      <div class="card-header">
+        <span class="card-label">Live Transcript</span>
+        <span id="word-count" style="font-size:10px;color:var(--text-muted)">0 words</span>
+      </div>
+      <div class="card-body">
+        <div id="transcript-box">
+          <span class="transcript-empty">Transcript will appear here as the call is detected…</span>
+        </div>
+      </div>
+      <div class="reset-row">
+        <span class="chunk-counter" id="chunk-counter">0 chunks processed</span>
+        <button class="reset-btn" onclick="resetSession()">Reset session</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right column: analysis -->
+  <div style="display:flex;flex-direction:column;gap:20px">
+
+    <!-- Score card -->
+    <div class="card fade-up" style="animation-delay:.15s">
+      <div class="card-header">
+        <span class="card-label">Scam Likelihood</span>
+        <span id="analysis-status" style="font-size:10px;color:var(--text-muted);letter-spacing:.08em"></span>
+      </div>
+      <div class="card-body" id="score-card-body">
+        <div class="idle-placeholder" id="score-idle">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+          </svg>
+          <p>Start a call to see<br>real-time scam analysis</p>
+        </div>
+        <div id="score-content" style="display:none">
+          <div class="score-display">
+            <div class="score-number" id="score-num">0%</div>
+            <div class="score-meta">
+              <div class="score-type" id="score-type">—</div>
+              <div class="score-urgency urgency-low" id="score-urgency">Low</div>
+            </div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reasons card -->
+    <div class="card fade-up" style="animation-delay:.2s" id="reasons-card">
+      <div class="card-header">
+        <span class="card-label">Why it's flagged</span>
+      </div>
+      <div class="card-body">
+        <div class="idle-placeholder" id="reasons-idle" style="padding:24px 0">
+          <p>Reasons will appear<br>once analysis runs</p>
+        </div>
+        <div id="reasons-list" class="reason-list" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Questions card -->
+    <div class="card fade-up" style="animation-delay:.25s" id="questions-card">
+      <div class="card-header">
+        <span class="card-label">What to say</span>
+        <span style="font-size:9px;color:var(--text-muted);letter-spacing:.1em">Ask the caller</span>
+      </div>
+      <div class="card-body">
+        <div class="idle-placeholder" id="questions-idle" style="padding:24px 0">
+          <p>Suggested responses<br>will appear here</p>
+        </div>
+        <div id="questions-list" class="question-list" style="display:none"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<!-- ── JavaScript ──────────────────────────────────── -->
+<script>
+// ── State ─────────────────────────────────────────
+let mediaRecorder = null;
+let audioStream   = null;
+let isRecording   = false;
+let chunkInterval = null;
+let timerInterval = null;
+let waveInterval  = null;
+let elapsedSecs   = 0;
+let chunkCount    = 0;
+let fullTranscript = "";
+let analyzerCtx   = null;
+let analyzerNode  = null;
+let dataArray     = null;
+
+// ── DOM refs ──────────────────────────────────────
+const micOuter      = document.getElementById("mic-outer");
+const statusBadge   = document.getElementById("status-badge");
+const statusText    = document.getElementById("status-text");
+const timerEl       = document.getElementById("timer");
+const micHint       = document.getElementById("mic-hint");
+const transcriptBox = document.getElementById("transcript-box");
+const wordCount     = document.getElementById("word-count");
+const chunkCounter  = document.getElementById("chunk-counter");
+const analysisStatus= document.getElementById("analysis-status");
+const scoreIdle     = document.getElementById("score-idle");
+const scoreContent  = document.getElementById("score-content");
+const scoreNum      = document.getElementById("score-num");
+const scoreType     = document.getElementById("score-type");
+const scoreUrgency  = document.getElementById("score-urgency");
+const progressFill  = document.getElementById("progress-fill");
+const reasonsIdle   = document.getElementById("reasons-idle");
+const reasonsList   = document.getElementById("reasons-list");
+const questionsIdle = document.getElementById("questions-idle");
+const questionsList = document.getElementById("questions-list");
+const waveCanvas    = document.getElementById("waveform");
+const waveCtx       = waveCanvas.getContext("2d");
+
+// ── Waveform ──────────────────────────────────────
+function resizeWave() {
+  waveCanvas.width  = waveCanvas.offsetWidth * devicePixelRatio;
+  waveCanvas.height = waveCanvas.offsetHeight * devicePixelRatio;
+  waveCtx.scale(devicePixelRatio, devicePixelRatio);
+}
+resizeWave();
+window.addEventListener("resize", resizeWave);
+
+function drawWaveIdle() {
+  const w = waveCanvas.offsetWidth, h = waveCanvas.offsetHeight;
+  waveCtx.clearRect(0, 0, w, h);
+  const bars = 40;
+  const barW = 2, gap = (w - bars * barW) / (bars + 1);
+  for (let i = 0; i < bars; i++) {
+    const x = gap + i * (barW + gap);
+    const bh = 3 + Math.sin(Date.now() / 800 + i * 0.4) * 2;
+    waveCtx.fillStyle = "#e4e2db";
+    waveCtx.beginPath();
+    waveCtx.roundRect(x, (h - bh) / 2, barW, bh, 1);
+    waveCtx.fill();
+  }
+}
+
+function drawWaveLive() {
+  if (!analyzerNode) return;
+  analyzerNode.getByteFrequencyData(dataArray);
+  const w = waveCanvas.offsetWidth, h = waveCanvas.offsetHeight;
+  waveCtx.clearRect(0, 0, w, h);
+  const bars = 40;
+  const barW = 2, gap = (w - bars * barW) / (bars + 1);
+  const step = Math.floor(dataArray.length / bars);
+  for (let i = 0; i < bars; i++) {
+    const val = dataArray[i * step] / 255;
+    const bh = 4 + val * (h - 8);
+    const x = gap + i * (barW + gap);
+    waveCtx.fillStyle = `rgba(26, 74, 58, ${0.3 + val * 0.7})`;
+    waveCtx.beginPath();
+    waveCtx.roundRect(x, (h - bh) / 2, barW, bh, 1);
+    waveCtx.fill();
+  }
+}
+
+(function animateWave() {
+  if (isRecording) drawWaveLive(); else drawWaveIdle();
+  requestAnimationFrame(animateWave);
+})();
+
+// ── Timer ─────────────────────────────────────────
+function formatTime(s) {
+  const m = String(Math.floor(s / 60)).padStart(2, "0");
+  const sec = String(s % 60).padStart(2, "0");
+  return `${m}:${sec}`;
+}
+
+// ── Toast ─────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2800);
+}
+
+// ── Recording toggle ──────────────────────────────
+async function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    await startRecording();
+  }
+}
+
+async function startRecording() {
+  try {
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    showToast("Microphone access denied — check browser permissions");
+    return;
+  }
+
+  // Web Audio for waveform
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaStreamSource(audioStream);
+  analyzerNode = audioCtx.createAnalyser();
+  analyzerNode.fftSize = 128;
+  dataArray = new Uint8Array(analyzerNode.frequencyBinCount);
+  source.connect(analyzerNode);
+
+  isRecording = true;
+  elapsedSecs = 0;
+  micOuter.classList.add("recording");
+  statusBadge.classList.add("recording");
+  statusText.textContent = "Recording";
+  micHint.innerHTML = "<strong>Monitoring active</strong><br>Tap to stop";
+
+  // Timer
+  timerInterval = setInterval(() => {
+    elapsedSecs++;
+    timerEl.textContent = formatTime(elapsedSecs);
+  }, 1000);
+
+  // Kick off first chunk immediately, then every 4 seconds
+  startChunk();
+  chunkInterval = setInterval(startChunk, 4000);
+}
+
+function stopRecording() {
+  isRecording = false;
+  clearInterval(chunkInterval);
+  clearInterval(timerInterval);
+  if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+  if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+  micOuter.classList.remove("recording");
+  statusBadge.classList.remove("recording");
+  statusBadge.classList.remove("analyzing");
+  statusText.textContent = "Standby";
+  micHint.innerHTML = "<strong>Tap to start monitoring</strong><br>Audio is analyzed every 4 seconds";
+  analyzerNode = null;
+}
+
+function startChunk() {
+  if (!audioStream || !isRecording) return;
+  const chunks = [];
+  mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  mediaRecorder.onstop = () => sendChunk(new Blob(chunks, { type: "audio/webm" }));
+  mediaRecorder.start();
+  setTimeout(() => {
+    if (mediaRecorder.state === "recording") mediaRecorder.stop();
+  }, 3800);
+}
+
+// ── Send chunk to Flask ───────────────────────────
+async function sendChunk(blob) {
+  if (!blob || blob.size < 500) return; // skip near-empty chunks
+
+  statusBadge.classList.remove("recording");
+  statusBadge.classList.add("analyzing");
+  statusText.textContent = "Analyzing";
+  analysisStatus.textContent = "Processing…";
+
+  const form = new FormData();
+  form.append("audio", blob, "chunk.webm");
+
+  try {
+    const res = await fetch("/analyze-chunk", { method: "POST", body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast("Server error: " + (err.error || res.status));
+      return;
+    }
+    const data = await res.json();
+    chunkCount++;
+    fullTranscript = data.full_transcript;
+    updateTranscript(data.chunk);
+    updateAnalysis(data);
+    chunkCounter.textContent = `${chunkCount} chunk${chunkCount !== 1 ? "s" : ""} processed`;
+  } catch (e) {
+    showToast("Connection error — is the server running?");
+    console.error(e);
+  } finally {
+    if (isRecording) {
+      statusBadge.classList.remove("analyzing");
+      statusBadge.classList.add("recording");
+      statusText.textContent = "Recording";
+    }
+    analysisStatus.textContent = "";
+  }
+}
+
+// ── Update transcript ─────────────────────────────
+function updateTranscript(chunk) {
+  if (!chunk || !chunk.trim()) return;
+
+  // Remove placeholder
+  const placeholder = transcriptBox.querySelector(".transcript-empty");
+  if (placeholder) placeholder.remove();
+
+  const cursor = transcriptBox.querySelector(".cursor-blink");
+  if (cursor) cursor.remove();
+
+  const span = document.createElement("span");
+  span.className = "chunk-new";
+  span.textContent = chunk + " ";
+  transcriptBox.appendChild(span);
+
+  const cur = document.createElement("span");
+  cur.className = "cursor-blink";
+  transcriptBox.appendChild(cur);
+
+  transcriptBox.scrollTop = transcriptBox.scrollHeight;
+
+  const words = fullTranscript.split(/\s+/).filter(Boolean).length;
+  wordCount.textContent = `${words} word${words !== 1 ? "s" : ""}`;
+}
+
+// ── Update analysis panel ─────────────────────────
+function updateAnalysis(data) {
+  const pct  = Math.round(data.probability);
+  const type = data.type    || "Unknown";
+  const urg  = data.urgency || "low";
+
+  // Show score content
+  scoreIdle.style.display    = "none";
+  scoreContent.style.display = "block";
+
+  // Score number + colour class
+  scoreNum.textContent = `${pct}%`;
+  scoreNum.className = "score-number";
+  if (pct >= 70) scoreNum.classList.add("danger");
+  else if (pct >= 40) scoreNum.classList.add("warn");
+  else scoreNum.classList.add("safe");
+
+  // Progress bar
+  progressFill.style.width = `${pct}%`;
+  progressFill.className = "progress-fill";
+  if (pct >= 70) progressFill.classList.add("danger");
+  else if (pct >= 40) progressFill.classList.add("warn");
+
+  // Type & urgency
+  scoreType.textContent = type;
+  scoreUrgency.className = `score-urgency urgency-${urg.toLowerCase()}`;
+  scoreUrgency.textContent = urg.charAt(0).toUpperCase() + urg.slice(1) + " urgency";
+
+  // Reasons
+  const reasons = data.reasons || [];
+  if (reasons.length) {
+    reasonsIdle.style.display  = "none";
+    reasonsList.style.display  = "flex";
+    reasonsList.innerHTML = reasons.map((r, i) =>
+      `<div class="reason-item" style="animation-delay:${i * 0.07}s">
+        <div class="reason-dot"></div>
+        <span>${r}</span>
+      </div>`
+    ).join("");
+  }
+
+  // Questions
+  const questions = data.questions || [];
+  if (questions.length) {
+    questionsIdle.style.display  = "none";
+    questionsList.style.display  = "flex";
+    questionsList.innerHTML = questions.map((q, i) =>
+      `<div class="question-item" style="animation-delay:${i * 0.08}s">"${q}"</div>`
+    ).join("");
+  }
+}
+
+// ── Reset session ─────────────────────────────────
+async function resetSession() {
+  if (isRecording) stopRecording();
+  try {
+    await fetch("/reset", { method: "POST" });
+  } catch (e) { /* silent */ }
+
+  // Reset UI
+  fullTranscript = "";
+  chunkCount     = 0;
+  elapsedSecs    = 0;
+  timerEl.textContent   = "00:00";
+  chunkCounter.textContent = "0 chunks processed";
+  wordCount.textContent = "0 words";
+  transcriptBox.innerHTML = '<span class="transcript-empty">Transcript will appear here as the call is detected…</span>';
+
+  scoreIdle.style.display    = "flex";
+  scoreContent.style.display = "none";
+  reasonsIdle.style.display  = "flex";
+  reasonsList.style.display  = "none";
+  questionsIdle.style.display  = "flex";
+  questionsList.style.display  = "none";
+
+  showToast("Session reset");
+}
+</script>
+</body>
+</html>
