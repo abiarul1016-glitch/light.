@@ -6,8 +6,8 @@
 
 ---
 
-![Python](https://img.shields.io/badge/Python-3.8+-7c3aed?style=for-the-badge&logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-7c3aed?style=for-the-badge&logo=flask&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.8+-007bff?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-007bff?style=for-the-badge&logo=flask&logoColor=white)
 
 ---
 
